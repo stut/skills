@@ -1,0 +1,17 @@
+{
+	"name": "stut",
+	"version": "0.1.0",
+	"description": "A collection of Claude Code skills by Stuart Dallas. Featuring tech-interview, a calibrated technical-interview practice skill.",
+	"author": {
+		"name": "Stuart Dallas",
+		"email": "stuart@stut.net"
+	},
+	"license": "MIT",
+	"keywords": [
+		"skills",
+		"interview",
+		"tech-interview",
+		"practice",
+		"evaluation"
+	]
+}
