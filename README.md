@@ -40,22 +40,6 @@ cp -R skills/tech-interview ~/.claude/skills/tech-interview             # or cop
 
 Restart Claude Code (or the host client) to pick up new skills.
 
-## Repo layout
-
-```
-stut/
-├── .claude-plugin/
-│   └── plugin.json        # plugin manifest
-├── skills/
-│   └── tech-interview/    # one skill per subdirectory
-│       ├── SKILL.md
-│       └── README.md
-├── scripts/
-│   └── install-for-claude.sh
-├── LICENSE
-└── README.md
-```
-
 ## Contributing
 
 Issues and PRs welcome. Each skill has its own README with usage details and known limitations.

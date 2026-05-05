@@ -35,6 +35,8 @@ Arguments are free-form. The skill parses what it can and asks for what's missin
 /tech-interview senior python "focus on concurrency, no web"
 ```
 
+**Tip:** run the session in a folder you can write into — code, design docs, diagrams, notes, whatever the question calls for. Drop deliverables in the working directory and point Claude at them; the report quality goes up sharply when there's something concrete to read. Claude also remembers what you've previously tackled (level, stack, problem shape) via the skill's session history, so future invocations avoid re-asking the same questions for ~30 days and frame older repeats as deliberate retests.
+
 ## How calibration works
 
 The skill pitches the question's scope and ambiguity to the level:
