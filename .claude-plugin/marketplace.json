@@ -1,0 +1,14 @@
+{
+	"name": "skills",
+	"owner": {
+		"name": "Stuart Dallas",
+		"email": "stuart@stut.net"
+	},
+	"plugins": [
+		{
+			"name": "stut",
+			"source": "./",
+			"description": "A collection of Claude Code skills by Stuart Dallas. Featuring tech-interview, a calibrated technical-interview practice skill."
+		}
+	]
+}
