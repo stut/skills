@@ -1,20 +1,33 @@
 name: Release
 
 on:
+  # Every merge to main ships to users (the marketplace serves the branch HEAD),
+  # so every merge must bump the version — auto-release a minor bump. Changes
+  # under .github/ don't affect the published plugin, so they don't trigger one.
+  push:
+    branches: [main]
+    paths-ignore:
+      - '.github/**'
+  # Manual runs pick the bump — for the rare major or patch release.
   workflow_dispatch:
     inputs:
       bump:
-        description: 'Which part of the version to bump'
+        description: 'Which part to bump (manual runs only; merges auto-bump minor)'
         required: true
-        default: 'patch'
+        default: 'minor'
         type: choice
         options:
-          - patch
           - minor
+          - patch
           - major
 
 permissions:
   contents: write
+
+# Serialize releases so concurrent merges don't race on the version/tag.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -24,10 +37,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          # Push as the repo admin (via PAT) so pushes to the protected
-          # default branch pass the ruleset's admin-role bypass. The default
-          # GITHUB_TOKEN authenticates as the GitHub Actions app, which cannot
-          # be a bypass actor on a personal repo, so its pushes are rejected.
+          # Always work from the latest main tip, not the triggering commit, so a
+          # queued run reads the version the previous release just wrote.
+          ref: main
+          # Push as the repo admin (via PAT) so pushes to the protected default
+          # branch pass the ruleset's admin-role bypass. The default GITHUB_TOKEN
+          # authenticates as the GitHub Actions app, which cannot be a bypass
+          # actor on a personal repo, so its pushes are rejected.
           token: ${{ secrets.RELEASE_TOKEN }}
 
       - name: Configure git
@@ -42,36 +58,27 @@ jobs:
           current=$(jq -r '.version' .claude-plugin/plugin.json)
           echo "Current version: $current"
 
-          # Strip a trailing -dev pre-release suffix, if present.
-          core=${current%-dev}
-          had_dev=false
-          [ "$core" != "$current" ] && had_dev=true
+          # Merges to main auto-release a minor bump; manual runs pick the bump.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            bump="${{ inputs.bump }}"
+          else
+            bump="minor"
+          fi
+          echo "Bump: $bump"
 
-          IFS='.' read -r major minor patch <<< "$core"
-
-          case "${{ inputs.bump }}" in
+          IFS='.' read -r major minor patch <<< "$current"
+          case "$bump" in
             major)
               major=$((major + 1)); minor=0; patch=0 ;;
             minor)
               minor=$((minor + 1)); patch=0 ;;
             patch)
-              # When the current version is already a -dev of the next patch,
-              # releasing that patch just means dropping the -dev suffix.
-              if [ "$had_dev" = "false" ]; then
-                patch=$((patch + 1))
-              fi
-              ;;
+              patch=$((patch + 1)) ;;
           esac
 
           release="${major}.${minor}.${patch}"
-          next_dev="${major}.${minor}.$((patch + 1))-dev"
-
-          {
-            echo "release=$release"
-            echo "next_dev=$next_dev"
-          } >> "$GITHUB_OUTPUT"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
           echo "Release version: $release"
-          echo "Next dev version: $next_dev"
 
       - name: Set release version in plugin.json
         run: |
@@ -83,9 +90,10 @@ jobs:
         run: |
           set -euo pipefail
           git add .claude-plugin/plugin.json
-          git commit -m "Release v${{ steps.versions.outputs.release }}"
+          # [skip ci] so this release commit's push doesn't re-trigger the workflow.
+          git commit -m "Release v${{ steps.versions.outputs.release }} [skip ci]"
           git tag "v${{ steps.versions.outputs.release }}"
-          git push origin "HEAD:${{ github.ref_name }}"
+          git push origin "HEAD:main"
           git push origin "v${{ steps.versions.outputs.release }}"
 
       - name: Create GitHub release
@@ -95,12 +103,3 @@ jobs:
           gh release create "v${{ steps.versions.outputs.release }}" \
             --title "v${{ steps.versions.outputs.release }}" \
             --generate-notes
-
-      - name: Bump to next dev version
-        run: |
-          set -euo pipefail
-          jq --tab --arg v "${{ steps.versions.outputs.next_dev }}" '.version = $v' \
-            .claude-plugin/plugin.json > plugin.tmp && mv plugin.tmp .claude-plugin/plugin.json
-          git add .claude-plugin/plugin.json
-          git commit -m "Bump to ${{ steps.versions.outputs.next_dev }} [skip ci]"
-          git push origin "HEAD:${{ github.ref_name }}"
