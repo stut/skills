@@ -1,6 +1,6 @@
 {
 	"name": "stut",
-	"version": "0.1.0",
+	"version": "0.1.0-dev",
 	"description": "A collection of Claude Code skills by Stuart Dallas. Featuring tech-interview, a calibrated technical-interview practice skill.",
 	"author": {
 		"name": "Stuart Dallas",
