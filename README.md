@@ -6,6 +6,7 @@ A [Claude Code plugin](https://docs.claude.com/en/docs/claude-code/plugins) bund
 
 | Skill | What it does |
 |---|---|
+| [github-repo-config](skills/github-repo-config/) | Configure a repo's branch-protection ruleset, PR, and merge settings via `gh` through a guided Q&A that shows current values and offers sensible defaults with explain-on-demand. |
 | [tech-interview](skills/tech-interview/) | Pose a calibrated technical interview question, run the session as a neutral interviewer, then probe and evaluate the candidate. |
 
 ## Install
