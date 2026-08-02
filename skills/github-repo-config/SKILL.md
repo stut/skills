@@ -45,11 +45,53 @@ Branch-protection settings apply only to the **target branch** (the default bran
 
 **Completion criterion:** every setting in the catalog has a resolved value before step 4.
 
-### 4. Confirm
+### 4. Impact check — what the new settings might break
 
-Show the full resolved config as a compact list grouped Merge / Branch-protection ruleset, and state it will be applied over the current settings. Get an explicit go-ahead. If the user turned every branch-protection setting off, note that an existing ruleset is left untouched unless they ask to remove it.
+Before confirming, test the **resolved** config against what already exists in the repo, so nothing the new rules will break comes as a surprise later. Only run the checks for rules being turned **on**. Surface every finding in the confirm step — never silently apply over a known breakage.
 
-### 5. Apply & report
+**Automation that writes to the protected branch.** The biggest trap: a workflow that pushes commits, tags, force-pushes, or deletes the branch starts failing the moment the ruleset is active — and the failure shows up on the *next* run, long after this skill finishes. Read the repo's workflow files (local clone or remote):
+
+```sh
+ls .github/workflows/ 2>/dev/null || gh api repos/{owner}/{repo}/contents/.github/workflows --jq '.[].path'
+gh api repos/{owner}/{repo}/contents/{path} --jq '.content' | base64 -d   # remote file contents
+```
+
+Flag anything that targets the default branch:
+
+| Pattern in a workflow | Breaks under | Note |
+|---|---|---|
+| `git push` to the default branch — incl. release bots (`semantic-release`, `release-please`, `stefanzweifel/git-auto-commit-action`, `EndBug/add-and-commit`) | **Require a pull request** | Direct pushes are rejected; the job must open a PR, or push as a bypassing actor. |
+| `git push --force` / `--force-with-lease` to the branch | **Block force pushes** | |
+| branch deletion (`git push origin --delete <branch>`, `DELETE .../git/refs/heads/<branch>`) | **Block branch deletion** | |
+| a push that introduces a merge commit | **Require linear history** | |
+
+For each hit, name the workflow and the rule it collides with, and offer three remedies: add a **bypass actor**, rework the job to open a **PR**, or **drop that rule**.
+
+⚠️ **Bypass reality on a personal repo:** the **GitHub Actions app cannot be a bypass actor** on a user-owned repo — it's org-only (the API rejects it with *"Actor GitHub Actions integration must be part of the ruleset source or owner organization"*). So a job pushing with the default `GITHUB_TOKEN` can't be exempted that way. What works instead: give the job a **PAT (or GitHub-App token) that authenticates as a repo admin** and add the **admin role** (`RepositoryRole`, `actor_id: 5`) to the bypass list — the push then acts as an admin and bypasses. The admin-role bypass does **not** cover the default `GITHUB_TOKEN`, because that authenticates as the Actions app, not as an admin user. (On an org repo, adding the Actions app as an `Integration` bypass actor is the clean option.)
+
+**Required status checks that never report.** If enabling required checks, confirm the named checks actually run on PRs — a required check that no workflow produces blocks *every* merge. Cross-check the names against recent runs:
+
+```sh
+gh api repos/{owner}/{repo}/commits/{default_branch}/check-runs --jq '.check_runs[].name'
+```
+
+**Open PRs the new rules would block.** Rules apply to in-flight PRs too. List them and note any that would become unmergeable:
+
+```sh
+gh pr list --repo {owner}/{repo} --state open --json number,title,reviewDecision
+```
+
+- **Require conversation resolution** → PRs with unresolved review threads can't merge until resolved.
+- **Required approvals raised** → PRs below the new threshold need more reviews (and see the solo-repo guard).
+- **Require linear history** → a PR whose branch carries merge commits must be rebased/squashed first.
+
+If any check surfaces a breakage, list it plainly in the confirm step and get explicit acknowledgement before applying.
+
+### 5. Confirm
+
+Show the full resolved config as a compact list grouped Merge / Branch-protection ruleset, and state it will be applied over the current settings. Include any **impact-check warnings** from step 4 so the user acknowledges them alongside the config. Get an explicit go-ahead. If the user turned every branch-protection setting off, note that an existing ruleset is left untouched unless they ask to remove it.
+
+### 6. Apply & report
 
 Apply the merge settings and the ruleset (see **Apply recipes**). Report each outcome separately — on failure, show the error and continue with the other rather than aborting silently.
 

@@ -24,6 +24,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # Push as the repo admin (via PAT) so pushes to the protected
+          # default branch pass the ruleset's admin-role bypass. The default
+          # GITHUB_TOKEN authenticates as the GitHub Actions app, which cannot
+          # be a bypass actor on a personal repo, so its pushes are rejected.
+          token: ${{ secrets.RELEASE_TOKEN }}
 
       - name: Configure git
         run: |
