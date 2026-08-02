@@ -1,0 +1,101 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Which part of the version to bump'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Compute versions
+        id: versions
+        run: |
+          set -euo pipefail
+          current=$(jq -r '.version' .claude-plugin/plugin.json)
+          echo "Current version: $current"
+
+          # Strip a trailing -dev pre-release suffix, if present.
+          core=${current%-dev}
+          had_dev=false
+          [ "$core" != "$current" ] && had_dev=true
+
+          IFS='.' read -r major minor patch <<< "$core"
+
+          case "${{ inputs.bump }}" in
+            major)
+              major=$((major + 1)); minor=0; patch=0 ;;
+            minor)
+              minor=$((minor + 1)); patch=0 ;;
+            patch)
+              # When the current version is already a -dev of the next patch,
+              # releasing that patch just means dropping the -dev suffix.
+              if [ "$had_dev" = "false" ]; then
+                patch=$((patch + 1))
+              fi
+              ;;
+          esac
+
+          release="${major}.${minor}.${patch}"
+          next_dev="${major}.${minor}.$((patch + 1))-dev"
+
+          {
+            echo "release=$release"
+            echo "next_dev=$next_dev"
+          } >> "$GITHUB_OUTPUT"
+          echo "Release version: $release"
+          echo "Next dev version: $next_dev"
+
+      - name: Set release version in plugin.json
+        run: |
+          set -euo pipefail
+          jq --tab --arg v "${{ steps.versions.outputs.release }}" '.version = $v' \
+            .claude-plugin/plugin.json > plugin.tmp && mv plugin.tmp .claude-plugin/plugin.json
+
+      - name: Commit, tag, and push release
+        run: |
+          set -euo pipefail
+          git add .claude-plugin/plugin.json
+          git commit -m "Release v${{ steps.versions.outputs.release }}"
+          git tag "v${{ steps.versions.outputs.release }}"
+          git push origin "HEAD:${{ github.ref_name }}"
+          git push origin "v${{ steps.versions.outputs.release }}"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${{ steps.versions.outputs.release }}" \
+            --title "v${{ steps.versions.outputs.release }}" \
+            --generate-notes
+
+      - name: Bump to next dev version
+        run: |
+          set -euo pipefail
+          jq --tab --arg v "${{ steps.versions.outputs.next_dev }}" '.version = $v' \
+            .claude-plugin/plugin.json > plugin.tmp && mv plugin.tmp .claude-plugin/plugin.json
+          git add .claude-plugin/plugin.json
+          git commit -m "Bump to ${{ steps.versions.outputs.next_dev }} [skip ci]"
+          git push origin "HEAD:${{ github.ref_name }}"
